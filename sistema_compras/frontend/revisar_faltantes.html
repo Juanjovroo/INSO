@@ -1,1 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revisar Inventario y Faltantes</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .critico { background-color: #ffdddd; font-weight: bold; } /* Resaltar críticos */
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Inventario y Productos Críticos</h1>
 
+    <div id="loading">Cargando inventario...</div>
+    <table id="inventario-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>Seleccionar</th>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Stock Actual</th>
+                <th>Stock Mínimo</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody id="inventario-body">
+            </tbody>
+    </table>
+
+    <button id="seleccionar-btn" style="display: none;" onclick="seleccionarParaCotizacion()">
+        Seleccionar para Cotización
+    </button>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000'; // Asegúrate de que esta URL sea correcta
+        const tableBody = document.getElementById('inventario-body');
+        const loadingDiv = document.getElementById('loading');
+        const seleccionarBtn = document.getElementById('seleccionar-btn');
+
+        // Función para consumir el endpoint GET /inventario/faltantes
+        async function getFaltantes() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/inventario/faltantes`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error("Error al obtener faltantes:", error);
+                return []; // Retornar un array vacío en caso de error
+            }
+        }
+
+        // Función para consumir el endpoint GET /inventario
+        async function getInventario() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/inventario`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error("Error al obtener el inventario completo:", error);
+                return [];
+            }
+        }
+
+        // Función para renderizar la tabla
+        async function renderInventario() {
+            loadingDiv.style.display = 'block';
+            tableBody.innerHTML = ''; // Limpiar tabla
+
+            const [inventario, faltantes] = await Promise.all([
+                getInventario(),
+                getFaltantes()
+            ]);
+
+            const faltantesIds = new Set(faltantes.map(p => p.id));
+
+            if (inventario.length > 0) {
+                inventario.forEach(producto => {
+                    const esCritico = faltantesIds.has(producto.id);
+                    const row = tableBody.insertRow();
+                    if (esCritico) {
+                        row.classList.add('critico');
+                    }
+
+                    // Celda de Checkbox
+                    const checkboxCell = row.insertCell();
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = JSON.stringify(producto); // Guardamos el objeto completo
+                    if (esCritico) {
+                        checkbox.checked = true; // Seleccionar automáticamente los críticos
+                    }
+                    checkboxCell.appendChild(checkbox);
+
+                    // Resto de celdas
+                    row.insertCell().textContent = producto.id;
+                    row.insertCell().textContent = producto.nombre;
+                    row.insertCell().textContent = producto.stock_actual;
+                    row.insertCell().textContent = producto.stock_minimo;
+                    row.insertCell().textContent = esCritico ? 'CRÍTICO' : 'OK';
+                });
+
+                document.getElementById('inventario-table').style.display = 'table';
+                seleccionarBtn.style.display = 'block';
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="6">No se encontraron productos en el inventario.</td></tr>';
+            }
+            loadingDiv.style.display = 'none';
+        }
+
+        // Función que guarda la selección y navega a la siguiente página
+        function seleccionarParaCotizacion() {
+            const checkboxes = document.querySelectorAll('#inventario-body input[type="checkbox"]:checked');
+            const productosSeleccionados = Array.from(checkboxes).map(cb => JSON.parse(cb.value));
+
+            if (productosSeleccionados.length === 0) {
+                alert('Debe seleccionar al menos un producto para cotizar.');
+                return;
+            }
+
+            // Usamos sessionStorage para pasar la información a la siguiente página
+            sessionStorage.setItem('productos_para_cotizar', JSON.stringify(productosSeleccionados));
+
+            // Navegar a la página de envío de cotización
+            window.location.href = 'enviar_cotizacion.html';
+        }
+
+        // Cargar datos al cargar la página
+        document.addEventListener('DOMContentLoaded', renderInventario);
+    </script>
+</body>
+</html>
